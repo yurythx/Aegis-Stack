@@ -38,16 +38,14 @@ setup_env() {
 }
 
 # ── Validação: Cloudflare Tunnel Token ───────────────────────────────────────
-# CF_TOKEN é um JWT (eyJ...). Não existe endpoint público para validá-lo
-# sem iniciar o tunnel — validamos formato e estrutura do JWT.
+# CF_TOKEN é um base64 de JSON simples (eyJ...) — não é um JWT de 3 partes.
+# Não existe endpoint público para validá-lo sem iniciar o tunnel.
 
 validate_cf_token() {
     local t="$1"
     is_placeholder "$t" && return 1
-    # JWT: 3 partes separadas por ponto, começa com eyJ
-    local parts
-    parts=$(echo "$t" | tr '.' '\n' | wc -l)
-    [[ "$t" == eyJ* && "$parts" -eq 3 ]]
+    # Cloudflare Tunnel token: base64 de JSON simples (eyJ...), sem pontos, ≥ 100 chars
+    [[ "$t" == eyJ* && ${#t} -ge 100 ]]
 }
 
 check_cf_token() {
@@ -68,7 +66,7 @@ check_cf_token() {
             ok "Guardado no .env."
             break
         else
-            err "Formato inválido. Deve ser um JWT (começa com 'eyJ' e tem 3 partes separadas por '.')."
+            err "Formato inválido. Deve começar com 'eyJ' e ter pelo menos 100 caracteres."
         fi
     done
 }

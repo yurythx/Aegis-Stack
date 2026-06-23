@@ -93,7 +93,7 @@ Se um token estiver em branco, o script pede e guarda no `.env`:
 ```
 
 > **O que é validado:**
-> - `CF_TOKEN` — estrutura JWT (3 partes, começa com `eyJ`)
+> - `CF_TOKEN` — começa com `eyJ` e tem ≥ 100 caracteres (formato Cloudflare Tunnel token)
 > - `TS_AUTHKEY` — formato `tskey-auth-xxx-xxx` com ≥ 40 caracteres
 > - `RUSTDESK_RELAY_HOST` — resolução DNS real
 >
