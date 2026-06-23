@@ -1,0 +1,118 @@
+# Aegis Stack — Infraestrutura de Conectividade e Suporte Remoto
+# Documentação completa: README.md
+
+services:
+
+  # ── 1. Tailscale ── VPN Mesh via WireGuard ───────────────────────────────
+  tailscale:
+    image: tailscale/tailscale:${TAILSCALE_VERSION:-v1.98.4}
+    container_name: tailscale
+    # network_mode: host é obrigatório: o daemon precisa manipular
+    # as tabelas de routing e criar interfaces no namespace do host.
+    network_mode: host
+    privileged: true
+    hostname: ${CLIENT_NAME}-node
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_HOSTNAME: ${CLIENT_NAME}
+      # false = modo kernel (usa /dev/net/tun); true = userspace (sem tun)
+      TS_USERSPACE: "false"
+      TS_EXTRA_ARGS: "--ssh --advertise-routes=${TAILSCALE_ROUTES:-192.168.1.0/24}"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # ── 2. Cloudflared ── Túnel de Borda (Cloudflare Zero Trust) ─────────────
+  cloudflared:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-2026.6.1}
+    container_name: cloudflared
+    # --no-autoupdate: controlo explícito de versões em produção
+    # --metrics: expõe /ready para o healthcheck
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run --token ${CF_TOKEN}
+    restart: unless-stopped
+    networks:
+      - aegis_net
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:2000/ready | grep -q OK || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── 3. RustDesk hbbs ── Servidor de ID e Rendezvous ──────────────────────
+  hbbs:
+    image: rustdesk/rustdesk-server:${RUSTDESK_VERSION:-1.1.15}
+    container_name: rustdesk_hbbs
+    command: hbbs -r ${RUSTDESK_RELAY_HOST}
+    volumes:
+      # hbbs gera o par de chaves; hbbr lê a chave pública do mesmo volume.
+      - rustdesk_data:/root
+    ports:
+      - "21115:21115"        # TCP — teste de tipo NAT
+      - "21116:21116"        # TCP — servidor de ID / registo
+      - "21116:21116/udp"    # UDP — hole punching P2P
+      - "21118:21118"        # TCP — WebSocket (clientes web)
+    networks:
+      - aegis_net
+    depends_on:
+      hbbr:
+        condition: service_started
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── 4. RustDesk hbbr ── Servidor de Relay ────────────────────────────────
+  hbbr:
+    image: rustdesk/rustdesk-server:${RUSTDESK_VERSION:-1.1.15}
+    container_name: rustdesk_hbbr
+    command: hbbr
+    volumes:
+      - rustdesk_data:/root
+    ports:
+      - "21117:21117"        # TCP — relay de dados
+      - "21119:21119"        # TCP — WebSocket relay
+    networks:
+      - aegis_net
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Redes ──────────────────────────────────────────────────────────────────
+networks:
+  aegis_net:
+    driver: bridge
+    name: aegis_net
+
+# ── Volumes ────────────────────────────────────────────────────────────────
+volumes:
+  tailscale_state:
+  rustdesk_data:
