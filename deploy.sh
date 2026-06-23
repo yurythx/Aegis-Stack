@@ -61,6 +61,9 @@ check_cf_token() {
     warn "Nota: validação de formato apenas — confirmação real ocorre no arranque do container."
     while true; do
         read -rp "  Cole o CF_TOKEN: " val
+        # remover prefixo "CF_TOKEN=" se o utilizador colou a linha completa
+        val="${val#CF_TOKEN=}"
+        val="${val#cf_token=}"
         if validate_cf_token "$val"; then
             set_env "CF_TOKEN" "$val"
             ok "Guardado no .env."
@@ -95,6 +98,9 @@ check_ts_key() {
     warn "Nota: validação de formato apenas — a chave é verificada pela Tailscale no arranque."
     while true; do
         read -rp "  Cole o TS_AUTHKEY: " val
+        # remover prefixo "TS_AUTHKEY=" se o utilizador colou a linha completa
+        val="${val#TS_AUTHKEY=}"
+        val="${val#ts_authkey=}"
         if validate_ts_key "$val"; then
             set_env "TS_AUTHKEY" "$val"
             ok "Guardado no .env."
